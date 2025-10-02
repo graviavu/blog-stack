@@ -16,6 +16,20 @@ import re
 import yaml
 import git
 
+def load_analytics_id(repo_name):
+    """Load Google Analytics tracking ID for repo"""
+    config_path = os.path.join(os.path.dirname(__file__), 'analytics.conf')
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            for line in f:
+                if '=' in line:
+                    repo, ga_id = line.strip().split('=', 1)
+                    if repo == repo_name:
+                        return ga_id
+    except FileNotFoundError:
+        pass
+    return None
+
 def load_template(template_name):
     """Load template file"""
     template_path = os.path.join(os.path.dirname(__file__), template_name)
@@ -235,6 +249,13 @@ def generate_blog_site(repo_dir, repo_url):
         html_doc = html_doc.replace('{{CONTENT}}', html_content)
         html_doc = html_doc.replace('{{COPYRIGHT}}', f'© 2024 {repo_name}')
         
+        # Add Google Analytics
+        ga_id = load_analytics_id(repo_name)
+        if ga_id:
+            ga_template = load_template('analytics.template')
+            ga_script = ga_template.replace('{{GA_ID}}', ga_id)
+            html_doc = html_doc.replace('</head>', f'{ga_script}\n</head>')
+        
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html_doc)
     
@@ -275,6 +296,14 @@ def update_image_references(md_content, copied_images):
 
 
 
+def extract_first_image(md_content):
+    """Extract first image from markdown content"""
+    pattern = r'!\[([^\]]*)\]\(([^\)]+)\)'
+    match = re.search(pattern, md_content)
+    if match:
+        return match.group(2)  # Return image path
+    return None
+
 def generate_home_page(published_blogs, all_blogs, output_dir, copied_images, repo_name):
     """Generate the home page using the blog template"""
     # Generate article cards HTML
@@ -290,16 +319,31 @@ def generate_home_page(published_blogs, all_blogs, output_dir, copied_images, re
             else:
                 content = md_content
             
-            excerpt = content[:150] + "..." if len(content) > 150 else content
+            # Extract first image
+            first_image = extract_first_image(content)
+            if first_image:
+                image_filename = os.path.basename(first_image)
+                if image_filename in copied_images:
+                    image_src = f"images/{copied_images[image_filename]}"
+                else:
+                    image_src = f"images/{image_filename}"
+                article_image = f'<img src="{image_src}" alt="Article image" style="width:100%;height:150px;object-fit:cover;">'
+            else:
+                article_image = '🧠'
+            
+            # Remove images from excerpt text
+            excerpt_text = re.sub(r'!\[([^\]]*)\]\([^\)]+\)', '', content)
+            excerpt = excerpt_text[:150] + "..." if len(excerpt_text) > 150 else excerpt_text
             excerpt = re.sub(r'[#*`]', '', excerpt)
         except:
             excerpt = "No preview available..."
+            article_image = '🧠'
         
         date_str = blog['date'].strftime('%B %d, %Y') if blog['date'] else 'No date'
         
         articles_html += f"""
                 <article class="article-card" onclick="location.href='{blog['path']}'">
-                    <div class="article-image">🧠</div>
+                    <div class="article-image">{article_image}</div>
                     <div class="article-content">
                         <h3 class="article-title">{blog['title']}</h3>
                         <div class="article-date">{date_str}</div>
@@ -322,8 +366,13 @@ def generate_home_page(published_blogs, all_blogs, output_dir, copied_images, re
     home_content = template_content.replace('{{SITE_TITLE}}', repo_name)
     home_content = home_content.replace('{{ARTICLES_CONTENT}}', articles_html)
     home_content = home_content.replace('{{COPYRIGHT}}', f'© 2024 {repo_name}')
-
-
+    
+    # Add Google Analytics to home page
+    ga_id = load_analytics_id(repo_name)
+    if ga_id:
+        ga_template = load_template('analytics.template')
+        ga_script = ga_template.replace('{{GA_ID}}', ga_id)
+        home_content = home_content.replace('</head>', f'{ga_script}\n</head>')
     
     with open(os.path.join(output_dir, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(home_content)
