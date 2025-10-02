@@ -94,7 +94,7 @@ Your blog content here...
 
 Create `analytics.conf` file with repository-to-tracking-ID mapping:
 ```
-MindWorks=G-LH6WC6F98T
+MindWorks=G-XXXXXXXXX
 my-blog-repo=G-XXXXXXXXXX
 ```
 
